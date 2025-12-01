@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ultra Animated Vocab — Simple HTML Version</title>
+  <meta name="description" content="Simple single-file animated vocabulary web app (LocalStorage)" />
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <!-- Lottie Player -->
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#7c3aed; --accent2:#06b6d4; --glass: rgba(255,255,255,0.04);
+      --soft: 14px; --radius:16px; --muted: #94a3b8;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;background:linear-gradient(180deg,var(--bg),#071025);color:#e6eef8;min-height:100vh;}
+    .wrap{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 8px 30px rgba(12,15,30,.6)}
+    h1{font-size:20px;margin:0}
+    .sub{color:var(--muted);font-size:13px}
+
+    /* Top cards */
+    .top-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:var(--radius);box-shadow:0 6px 30px rgba(2,6,23,.6);border:1px solid rgba(255,255,255,0.03)}
+    .target{display:flex;flex-direction:column;gap:10px}
+    .progress{height:12px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%}
+    .streak{display:flex;align-items:center;gap:12px;font-weight:600}
+    .streak .fire{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(45deg,#ffb86b,#ff6b6b);box-shadow:0 6px 18px rgba(255,106,106,0.16)}
+
+    /* Search + controls */
+    .controls{display:flex;gap:12px;align-items:center}
+    .search{padding:10px 12px;border-radius:12px;background:var(--glass);border:1px solid rgba(255,255,255,0.03);min-width:240px;color:var(--muted)}
+    .btn{padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,var(--accent),var(--accent2));border:none;color:white;cursor:pointer}
+
+    /* Grid of words */
+    .words-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:18px}
+    .word-card{padding:14px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));border:1px solid rgba(255,255,255,0.03);position:relative;overflow:hidden}
+    .word-top{display:flex;justify-content:space-between;align-items:center}
+    .word-title{font-size:18px;font-weight:700}
+    .pos{font-size:12px;color:var(--muted);padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02)}
+    .meaning{color:#cfe9ff;margin-top:8px;font-weight:600}
+    .example{color:var(--muted);font-size:13px;margin-top:8px}
+    .card-actions{display:flex;gap:8px;align-items:center;margin-top:12px}
+    .toggle{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);cursor:pointer}
+    .listen{cursor:pointer;padding:8px;border-radius:10px;background:rgba(255,255,255,0.02)}
+    .bookmark{position:absolute;right:12px;top:12px;opacity:.15}
+    .highlight{box-shadow:0 0 18px rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.12)}
+
+    /* Exam modal */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:60}
+    .modal.show{display:flex}
+    .modal-card{width:90%;max-width:720px;background:#051025;border-radius:18px;padding:18px;border:1px solid rgba(255,255,255,0.04)}
+    .question{font-size:20px;font-weight:700}
+    .options{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+    .option{padding:12px;border-radius:12px;background:rgba(255,255,255,0.02);cursor:pointer}
+    .correct{background:linear-gradient(90deg,#16a34a33,#16a34a22)}
+    .wrong{background:linear-gradient(90deg,#ef444433,#ef444422)}
+
+    /* responsive */
+    @media (max-width:900px){.top-grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">V</div>
+      <div>
+        <h1>UltraAnimated Vocab</h1>
+        <div class="sub">Simple HTML version — LocalStorage</div>
+      </div>
+    </div>
+    <div class="controls">
+      <input id="search" class="search" placeholder="Search words... (English or Bangla)" />
+      <button id="startExam" class="btn">Start Exam</button>
+    </div>
+  </header>
+
+  <div class="top-grid">
+    <div class="card target">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700">Daily target</div><div class="sub">5–10 words</div></div>
+      <div class="progress"><i id="progressBar"></i></div>
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="sub">Learned today: <b id="learnedToday">0</b></div><div class="sub">Goal: <b id="dailyGoal">5</b></div></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="streak"><div class="fire">🔥</div><div>Streak</div></div>
+          <div style="font-weight:700;font-size:18px;margin-top:8px" id="streakCount">0 days</div>
+        </div>
+        <div style="width:120px;height:120px;display:flex;align-items:center;justify-content:center">
+          <lottie-player src="https://assets7.lottiefiles.com/packages/lf20_jcikwtux.json" background="transparent" speed="1" style="width:84px;height:84px" loop autoplay></lottie-player>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700">Review</div><div class="sub">Failed words</div></div>
+      <div id="reviewList" style="margin-top:12px;color:var(--muted)">No failed words yet</div>
+    </div>
+  </div>
+
+  <div class="words-grid" id="wordsGrid"></div>
+</div>
+
+<!-- Exam modal -->
+<div id="examModal" class="modal">
+  <div class="modal-card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:800">Exam</div>
+      <div><button id="closeExam" class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.06)">Close</button></div>
+    </div>
+    <div style="margin-top:12px" id="examContent">
+      <div class="question" id="questionText">Question will appear here</div>
+      <div class="options" id="options"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+        <div class="sub">Time left: <b id="timer">--</b></div>
+        <div><button id="nextBtn" class="btn">Next</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------------------ Sample word list (replace or expand to 1000+) ------------------
+const words = [
+  {word:'confident', pos:'adjective', bn:'আত্মবিশ্বাসী', ex:'He felt confident about the exam.'},
+  {word:'improve', pos:'verb', bn:'উন্নতি করা', ex:'Practice will improve your skills.'},
+  {word:'delicious', pos:'adjective', bn:'সুস্বাদু', ex:'The cake tastes delicious.'},
+  {word:'arrive', pos:'verb', bn:'আগমন করা', ex:'She will arrive at 3 PM.'},
+  {word:'brave', pos:'adjective', bn:'সাহসী', ex:'The brave boy saved the cat.'},
+  {word:'joyful', pos:'adjective', bn:'আনন্দিত', ex:'They felt joyful at the news.'},
+  {word:'listen', pos:'verb', bn:'শুনা', ex:'Listen to the teacher carefully.'},
+  {word:'swift', pos:'adjective', bn:'দ্রুত', ex:'The fox is swift.'},
+  {word:'challenge', pos:'noun', bn:'চ্যালেঞ্জ', ex:'This is a difficult challenge.'},
+  {word:'creative', pos:'adjective', bn:'সৃজনশীল', ex:'She is very creative.'},
+  {word:'patient', pos:'adjective', bn:'ধৈর্যশীল', ex:'Be patient with yourself.'},
+  {word:'unique', pos:'adjective', bn:'অনন্য', ex:'This is a unique idea.'},
+  {word:'wonder', pos:'verb', bn:'অবাক হওয়া', ex:'I wonder what will happen.'},
+  {word:'responsible', pos:'adjective', bn:'দায়িত্বশীল', ex:'Parents are responsible for children.'},
+  {word:'curious', pos:'adjective', bn:'জিগ্যেসু', ex:'The child was curious about insects.'},
+  {word:'whisper', pos:'verb', bn:'ফিসফিস করা', ex:'They whisper during the movie.'},
+  {word:'bright', pos:'adjective', bn:'উজ্জ্বল', ex:'The sun is bright today.'},
+  {word:'build', pos:'verb', bn:'তৈরি করা', ex:'They build a new house.'},
+  {word:'safe', pos:'adjective', bn:'নিরাপদ', ex:'Wear a helmet to stay safe.'},
+  {word:'kind', pos:'adjective', bn:'দয়ালু', ex:'She is kind to animals.'},
+  {word:'travel', pos:'verb', bn:'ভ্রমণ করা', ex:'We travel by train.'},
+  {word:'focus', pos:'verb', bn:'একাগ্রতা করা', ex:'Focus on your studies.'},
+  {word:'responsibility', pos:'noun', bn:'দায়িত্ব', ex:'He accepted the responsibility.'},
+  {word:'astonish', pos:'verb', bn:'আশ্চর্য করা', ex:'The magic trick will astonish you.'},
+  {word:'gentle', pos:'adjective', bn:'নরম', ex:'He has a gentle voice.'},
+  {word:'measure', pos:'verb', bn:'পরিমাপ করা', ex:'Measure the length carefully.'},
+  {word:'repair', pos:'verb', bn:'মেরামত করা', ex:'Repair the broken toy.'},
+  {word:'discover', pos:'verb', bn:'আবিষ্কার করা', ex:'They discover new places.'},
+  {word:'honest', pos:'adjective', bn:'সতত', ex:'Be honest with your friend.'},
+  {word:'fortunate', pos:'adjective', bn:'ভাগ্যবান', ex:'We are fortunate to have helpers.'},
+  {word:'relax', pos:'verb', bn:'আরাম করা', ex:'Relax after hard work.'},
+  {word:'admire', pos:'verb', bn:'প্রশংসা করা', ex:'I admire your courage.'},
+  {word:'capture', pos:'verb', bn:'ধরা', ex:'Capture the moment with a photo.'},
+  {word:'encourage', pos:'verb', bn:'উৎসাহিত করা', ex:'Encourage your classmates.'},
+  {word:'harmony', pos:'noun', bn:'সাম্য', ex:'They live in harmony.'},
+  {word:'minor', pos:'adjective', bn:'ছোট', ex:'This is a minor issue.'},
+  {word:'solid', pos:'adjective', bn:'কঠিন', ex:'The table is solid.'},
+  {word:'celebrate', pos:'verb', bn:'উদযাপন করা', ex:'We celebrate birthdays.'}
+];
+
+// ------------------ LocalStorage keys ------------------
+const LS = { memorized: 'ua_memorized_v1', stats: 'ua_stats_v1', failed: 'ua_failed_v1' };
+
+// Load user data
+let memorized = JSON.parse(localStorage.getItem(LS.memorized) || '[]');
+let stats = JSON.parse(localStorage.getItem(LS.stats) || '{"learnedToday":0,"streak":0,"lastLearned":""}');
+let failed = JSON.parse(localStorage.getItem(LS.failed) || '[]');
+
+// Utility: save
+function saveAll(){ localStorage.setItem(LS.memorized, JSON.stringify(memorized)); localStorage.setItem(LS.stats, JSON.stringify(stats)); localStorage.setItem(LS.failed, JSON.stringify(failed)); }
+
+// UI refs
+const wordsGrid = document.getElementById('wordsGrid');
+const progressBar = document.getElementById('progressBar');
+const learnedTodayEl = document.getElementById('learnedToday');
+const dailyGoalEl = document.getElementById('dailyGoal');
+const streakCount = document.getElementById('streakCount');
+const reviewList = document.getElementById('reviewList');
+const searchInput = document.getElementById('search');
+
+// Init display
+function renderTop(){
+  const learnedToday = stats.learnedToday || 0;
+  learnedTodayEl.textContent = learnedToday;
+  const goal = parseInt(dailyGoalEl.textContent) || 5;
+  const pct = Math.min(100, Math.round(learnedToday/goal*100));
+  progressBar.style.width = pct + '%';
+  streakCount.textContent = (stats.streak || 0) + ' days';
+  reviewList.textContent = failed.length ? failed.map(w=>w.word).slice(0,6).join(', ') : 'No failed words yet';
+}
+
+function createCard(w){
+  const el = document.createElement('div'); el.className='card word-card';
+  if(failed.find(f=>f.word===w.word)) el.classList.add('highlight');
+  el.innerHTML = `
+    <div class="word-top">
+      <div>
+        <div class="word-title">${w.word}</div>
+        <div class="pos">${w.pos}</div>
+      </div>
+      <div class="bookmark">🔖</div>
+    </div>
+    <div class="meaning">${w.bn}</div>
+    <div class="example">${w.ex}</div>
+    <div class="card-actions">
+      <div class="listen" title="Listen">🔊</div>
+      <div class="toggle">${memorized.includes(w.word)?'✔ Memorized':'Mark as Memorized'}</div>
+    </div>
+  `;
+  const listen = el.querySelector('.listen');
+  listen.addEventListener('click',()=>{speak(w.word)});
+  const toggle = el.querySelector('.toggle');
+  toggle.addEventListener('click',()=>{
+    if(!memorized.includes(w.word)){
+      memorized.push(w.word);
+      stats.learnedToday = (stats.learnedToday||0) + 1;
+      // streak logic: if lastLearned is today -> increment else reset
+      const last = stats.lastLearned || '';
+      const today = new Date().toISOString().slice(0,10);
+      if(last===today){} else { stats.streak = (stats.streak||0)+1; stats.lastLearned = today; }
+      toggle.textContent = '✔ Memorized';
+      // success animation
+      confetti({particleCount:20,spread:50,origin:{y:0.6}});
+      gsap.fromTo(el,{scale:0.96},{scale:1,duration:0.42, ease:'elastic.out(1,0.6)'});
+    } else {
+      memorized = memorized.filter(m=>m!==w.word);
+      toggle.textContent = 'Mark as Memorized';
+    }
+    saveAll(); renderTop();
+  });
+  // hover animation
+  el.addEventListener('mouseenter',()=>gsap.to(el,{scale:1.02,duration:0.25}));
+  el.addEventListener('mouseleave',()=>gsap.to(el,{scale:1,duration:0.25}));
+  return el;
+}
+
+function renderWords(filter=''){
+  wordsGrid.innerHTML='';
+  const f = filter.trim().toLowerCase();
+  const list = words.filter(w=>{
+    return !f || w.word.toLowerCase().includes(f) || w.bn.toLowerCase().includes(f) || (w.ex && w.ex.toLowerCase().includes(f));
+  });
+  list.forEach(w=>wordsGrid.appendChild(createCard(w)));
+}
+
+// Speech
+function speak(text){
+  if('speechSynthesis' in window){
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+  } else alert('Speech not supported in this browser');
+}
+
+// Search
+searchInput.addEventListener('input',e=>renderWords(e.target.value));
+
+// initial render
+renderTop(); renderWords();
+
+// ------------------ Exam system (simple using memorized words) ------------------
+const examModal = document.getElementById('examModal');
+const startExamBtn = document.getElementById('startExam');
+const closeExam = document.getElementById('closeExam');
+const questionText = document.getElementById('questionText');
+const optionsWrap = document.getElementById('options');
+const nextBtn = document.getElementById('nextBtn');
+const timerEl = document.getElementById('timer');
+let examState = null; // {questions:[],index,mode,timer}
+
+startExamBtn.addEventListener('click',()=>{
+  const pool = words.filter(w=>memorized.includes(w.word));
+  if(pool.length<5){ alert('You need at least 5 memorized words to take an exam.'); return; }
+  // create questions (MCQ) — 10 q by default
+  const qcount = 10;
+  const shuffled = pool.sort(()=>0.5-Math.random()).slice(0,qcount);
+  const questions = shuffled.map(q=>{
+    const wrong = words.filter(w=>w.word!==q.word).sort(()=>0.5-Math.random()).slice(0,3).map(x=>x.word);
+    const choices = [q.word,...wrong].sort(()=>0.5-Math.random());
+    return {answer:q.word,choices,meaning:q.bn};
+  });
+  examState = {questions,index:0,score:0,timeLeft:60};
+  openExam(); renderExamQuestion();
+});
+
+function openExam(){ examModal.classList.add('show'); gsap.from('.modal-card',{y:30,opacity:0,duration:0.5}); }
+closeExam.addEventListener('click',()=>{examModal.classList.remove('show'); examState=null});
+
+function renderExamQuestion(){
+  if(!examState) return;
+  const q = examState.questions[examState.index];
+  questionText.textContent = `Select the English word for: "${q.meaning}"`;
+  optionsWrap.innerHTML='';
+  q.choices.forEach(c=>{
+    const o = document.createElement('div'); o.className='option'; o.textContent=c;
+    o.addEventListener('click',()=>handleAnswer(c,o));
+    optionsWrap.appendChild(o);
+  });
+  examState.timeLeft = 60; timerEl.textContent = examState.timeLeft + 's';
+  // timer countdown
+  if(examState.timer) clearInterval(examState.timer);
+  examState.timer = setInterval(()=>{
+    examState.timeLeft--; timerEl.textContent = examState.timeLeft + 's';
+    if(examState.timeLeft<=0){ clearInterval(examState.timer); markWrong(); }
+  },1000);
+}
+function handleAnswer(choice,el){
+  const q = examState.questions[examState.index];
+  if(choice===q.answer){ el.classList.add('correct'); examState.score++; confetti({particleCount:30}); }
+  else{ el.classList.add('wrong'); markFail(q.answer); }
+  // disable options
+  Array.from(optionsWrap.children).forEach(c=>c.style.pointerEvents='none');
+}
+function markWrong(){ const q = examState.questions[examState.index]; markFail(q.answer); Array.from(optionsWrap.children).forEach(c=>{if(c.textContent===q.answer) c.classList.add('correct');}); }
+function markFail(word){ if(!failed.find(f=>f.word===word)) failed.push({word}); saveAll(); renderTop(); }
+
+nextBtn.addEventListener('click',()=>{
+  if(!examState) return;
+  clearInterval(examState.timer);
+  examState.index++;
+  if(examState.index>=examState.questions.length){ finishExam(); return; }
+  renderExamQuestion();
+});
+
+function finishExam(){
+  const total = examState.questions.length; const score = examState.score;
+  examModal.querySelector('#examContent').innerHTML = `
+    <div style="text-align:center;padding:18px">
+      <div style="font-size:28px;font-weight:800">Result</div>
+      <div style="margin-top:8px">Score: <b>${score}/${total}</b></div>
+      <div style="margin-top:8px">Accuracy: <b>${Math.round(score/total*100)}%</b></div>
+      <div style="margin-top:12px"><button id="closeResult" class="btn">Close</button> <button id="retryExam" class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.06);">Retry</button></div>
+    </div>
+  `;
+  // save failed automatically already done
+  document.getElementById('closeResult').addEventListener('click',()=>{examModal.classList.remove('show'); location.reload();});
+  document.getElementById('retryExam').addEventListener('click',()=>{ location.reload(); });
+}
+
+// small UX: press Enter on search to focus first card
+searchInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ const first = document.querySelector('.word-card .toggle'); if(first) first.focus(); }});
+
+// save initial state
+saveAll();
+
+// small animation: float logo and reveal cards
+gsap.from('.logo',{y:-6,rotation:-6,duration:1.4,repeat:-1,yoyo:true,ease:'sine.inOut'});
+gsap.from('.card',{y:20,opacity:0,duration:0.8,stagger:0.06,delay:0.2});
+
+// Instructions for adding words: replace 'words' array with a larger JSON or fetch external words.json
+</script>
+</body>
+</html>
